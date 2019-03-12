@@ -3,6 +3,7 @@ package cmd
 import (
 	"log"
 	"strings"
+	"time"
 
 	"github.com/alexellis/inlets/pkg/client"
 	"github.com/pkg/errors"
@@ -83,9 +84,10 @@ func runClient(cmd *cobra.Command, _ []string) error {
 	}
 
 	inletsClient := client.Client{
-		Remote:      remote,
-		UpstreamMap: upstreamMap,
-		Token:       token,
+		Remote:           remote,
+		UpstreamMap:      upstreamMap,
+		Token:            token,
+		PingWaitDuration: time.Second * 5,
 	}
 
 	if err := inletsClient.Connect(); err != nil {

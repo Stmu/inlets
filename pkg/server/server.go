@@ -95,12 +95,19 @@ func proxyHandler(outgoing chan *http.Request, bus *types.Bus, gatewayTimeout ti
 			select {
 			case res := <-sub.Data:
 
-				innerBody, _ := ioutil.ReadAll(res.Body)
+				if res != nil && res.Body != nil {
+					innerBody, _ := ioutil.ReadAll(res.Body)
 
-				transport.CopyHeaders(w.Header(), &res.Header)
-				w.WriteHeader(res.StatusCode)
-				w.Write(innerBody)
-				log.Printf("[%s] wrote %d bytes", inletsID, len(innerBody))
+					transport.CopyHeaders(w.Header(), &res.Header)
+					w.WriteHeader(res.StatusCode)
+					w.Write(innerBody)
+					log.Printf("[%s] wrote %d bytes", inletsID, len(innerBody))
+				} else {
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte("Request or body from request was nil, client may have disconnected"))
+					log.Printf("Request or body from request was nil, client may have disconnected")
+				}
+
 				wg.Done()
 				break
 			case <-time.After(gatewayTimeout):
@@ -136,7 +143,7 @@ func serveWs(outgoing chan *http.Request, bus *types.Bus, token string) func(w h
 			w.Write([]byte(err.Error()))
 		}
 
-		ws, err := upgrader.Upgrade(w, r, nil)
+		wsc, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			if _, ok := err.(websocket.HandshakeError); !ok {
 				log.Println(err)
@@ -144,7 +151,32 @@ func serveWs(outgoing chan *http.Request, bus *types.Bus, token string) func(w h
 			return
 		}
 
-		log.Printf("Connecting websocket on %s:", ws.RemoteAddr())
+		ping := time.Second * 5
+		ws := transport.NewWebsocketConn(wsc, ping)
+
+		// Send pings
+		// tickerDone := make(chan bool)
+
+		// go func() {
+		// 	log.Printf("Writing pings")
+
+		// 	ws.Ping()
+
+		// 	ticker := time.NewTicker(ping)
+		// 	for {
+		// 		select {
+		// 		case <-ticker.C:
+		// 			if err := ws.Ping(); err != nil {
+		// 				close(tickerDone)
+		// 			}
+		// 			break
+		// 		case <-tickerDone:
+		// 			return
+		// 		}
+		// 	}
+		// }()
+
+		log.Printf("Connecting websocket on: %s with ping=%s", wsc.RemoteAddr(), ping)
 
 		connectionDone := make(chan struct{})
 
